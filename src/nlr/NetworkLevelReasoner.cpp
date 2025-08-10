@@ -129,8 +129,17 @@ void NetworkLevelReasoner::evaluate( double *input, double *output )
     const Layer *outputLayer = _layerIndexToLayer[_layerIndexToLayer.size() - 1];
     memcpy( output, outputLayer->getAssignment(), sizeof( double ) * outputLayer->getSize() );
 }
+void NetworkLevelReasoner::setBounds( unsigned layer,
+                                      unsigned int neuron,
+                                      double lower,
+                                      double upper )
+{
+    ASSERT( layer < _layerIndexToLayer.size() );
+    _layerIndexToLayer[layer]->setBounds( neuron, lower, upper );
+}
 
-void NetworkLevelReasoner::concretizeInputAssignment( Map<unsigned, double> &assignment )
+void NetworkLevelReasoner::concretizeInputAssignment( Map<unsigned, double> &assignment,
+                                                      const double *pgdAdversarialInput )
 {
     Layer *inputLayer = _layerIndexToLayer[0];
     ASSERT( inputLayer->getLayerType() == Layer::INPUT );
@@ -147,6 +156,8 @@ void NetworkLevelReasoner::concretizeInputAssignment( Map<unsigned, double> &ass
         {
             unsigned variable = inputLayer->neuronToVariable( index );
             double value = _tableau->getValue( variable );
+            if ( pgdAdversarialInput )
+                value = pgdAdversarialInput[index];
             input[index] = value;
             assignment[variable] = value;
         }
@@ -202,7 +213,6 @@ void NetworkLevelReasoner::clearConstraintTightenings()
 
 void NetworkLevelReasoner::symbolicBoundPropagation()
 {
-    _outputBounds.clear();
     _boundTightenings.clear();
 
     for ( unsigned i = 0; i < _layerIndexToLayer.size(); ++i )
@@ -211,19 +221,14 @@ void NetworkLevelReasoner::symbolicBoundPropagation()
 
 void NetworkLevelReasoner::deepPolyPropagation()
 {
-    _outputBounds.clear();
-    _boundTightenings.clear();
-
     if ( _deepPolyAnalysis == nullptr )
         _deepPolyAnalysis = std::unique_ptr<DeepPolyAnalysis>( new DeepPolyAnalysis( this ) );
     _deepPolyAnalysis->run();
 }
 
-void NetworkLevelReasoner::alphaCrownPropagation()
+void NetworkLevelReasoner::alphaCrown()
 {
 #ifdef BUILD_TORCH
-    _outputBounds.clear();
-    _boundTightenings.clear();
     if ( _alphaCrown == nullptr )
         _alphaCrown = std::unique_ptr<AlphaCrown>( new AlphaCrown( this ) );
     _alphaCrown->run();
